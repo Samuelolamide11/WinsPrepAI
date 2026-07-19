@@ -716,9 +716,11 @@ async function selectNotesSubject(subject){
 
   const system = `You suggest a table of contents for a Nigerian Primary 6 pupil studying for the Common Entrance Examination. Output ONLY a valid JSON array of exactly 8 short topic name strings for the given subject, ordered from foundational to more advanced. No markdown fences, no commentary.`;
   try{
-    let raw = await callOpenAI(system, [{ role:'user', content: `Subject: ${subject}` }], 400);
+    let raw = await callOpenAI(system, [{ role:'user', content: `Subject: ${subject}` }], 700);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.notes.topics = parseAiJson(raw);
+    const topics = parseAiJsonArray(raw);
+    if(!topics.length) throw new Error('The response did not contain any usable topics.');
+    state.notes.topics = topics;
     state.notes.phase = 'topics';
   }catch(err){
     if(err.message === 'missing_key'){ state.notes.topicsLoading=false; render(); toggleSettings(); return; }
@@ -1293,26 +1295,31 @@ function sanitizeJsonText(text){
 // longer responses now that most questions include a chart), plain JSON.parse fails
 // entirely. This recovers whatever complete question objects came through instead of
 // throwing away the whole quiz.
-function parseQuizJson(text){
+// Recovers a usable array from AI JSON output even if the response was cut off
+// entirely before the closing bracket - works for arrays of objects (quiz questions,
+// each closed by "}") and arrays of plain strings (topic lists, each closed by a
+// closing quote), by trying to close the array at progressively earlier points.
+function parseAiJsonArray(text){
   text = sanitizeJsonText(text);
   try{
     const parsed = JSON.parse(text);
     if(Array.isArray(parsed)) return parsed;
   }catch(e){ /* fall through to recovery */ }
 
-  const closeBraceIndices = [];
+  const closerIndices = [];
   for(let i = 0; i < text.length; i++){
-    if(text[i] === '}') closeBraceIndices.push(i + 1);
+    if(text[i] === '}' || text[i] === '"') closerIndices.push(i + 1);
   }
-  for(let i = closeBraceIndices.length - 1; i >= 0; i--){
-    const candidate = text.slice(0, closeBraceIndices[i]) + ']';
+  for(let i = closerIndices.length - 1; i >= 0; i--){
+    const candidate = text.slice(0, closerIndices[i]) + ']';
     try{
       const parsed = JSON.parse(candidate);
       if(Array.isArray(parsed) && parsed.length) return parsed;
-    }catch(e){ /* try an earlier closing brace */ }
+    }catch(e){ /* try an earlier closing point */ }
   }
   return [];
 }
+function parseQuizJson(text){ return parseAiJsonArray(text); }
 
 // Same idea as parseQuizJson but for plain JSON objects/arrays used elsewhere
 // (topics list, notes content, grammar result, study plan) - sanitize first,
