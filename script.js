@@ -15,11 +15,10 @@ function initialsAvatar(name, size){
   return `<div style="width:${s}px;height:${s}px;border-radius:50%;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-family:'Poppins';font-weight:800;color:var(--deep-pink);font-size:${s*0.42}px;">${letter}</div>`;
 }
 
-// ---- Google Gemini configuration ----
-// This key lives only in this browser tab's memory (never saved to disk/localStorage).
-// It is visible to anyone who opens dev tools on this page, so only use a key here for
-// your own local testing, never ship this file publicly with a key baked in.
-let OPENAI_API_KEY = '';
+// ---- AI configuration ----
+// The real Gemini API key lives only on the server, as the GEMINI_API_KEY environment
+// variable read by /api/generate.js. The browser never sees it, so users of the deployed
+// app don't need to enter or manage an API key themselves.
 let OPENAI_MODEL = 'gemini-flash-latest';
 
 let state = {
@@ -40,9 +39,6 @@ let state = {
 };
 
 async function callOpenAI(systemPrompt, messages, maxTokens){
-  if(!OPENAI_API_KEY){
-    throw new Error('missing_key');
-  }
   // Translate our generic {role, content} messages into Gemini's {role, parts} shape.
   // Gemini uses "model" instead of "assistant", and images go in as inline_data, not image_url.
   const contents = messages.map(m => {
@@ -64,21 +60,21 @@ async function callOpenAI(systemPrompt, messages, maxTokens){
     return { role, parts };
   });
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${OPENAI_MODEL}:generateContent?key=${OPENAI_API_KEY}`;
   const requestBody = JSON.stringify({
-    system_instruction: { parts: [{ text: systemPrompt }] },
+    systemPrompt,
     contents,
-    generationConfig: { maxOutputTokens: maxTokens || 700 }
+    maxOutputTokens: maxTokens || 700,
+    model: OPENAI_MODEL
   });
 
-  // Gemini's free tier occasionally returns 503 (overloaded) or 429 (rate limited) -
-  // these are transient, so retry a couple of times with a short backoff before giving up.
+  // The backend proxy (/api/generate) can itself hit transient 503 (overloaded) or
+  // 429 (rate limited) responses from Gemini - retry a couple of times before giving up.
   const maxAttempts = 3;
   let lastError;
   for(let attempt = 1; attempt <= maxAttempts; attempt++){
     let response;
     try{
-      response = await fetch(endpoint, {
+      response = await fetch('/api/generate', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body: requestBody
@@ -107,9 +103,7 @@ async function callOpenAI(systemPrompt, messages, maxTokens){
 
 function toggleSettings(){ state.showSettings = !state.showSettings; render(); }
 function saveSettings(){
-  const keyInput = document.getElementById('apiKeyInput');
   const modelInput = document.getElementById('modelInput');
-  OPENAI_API_KEY = keyInput.value.trim();
   OPENAI_MODEL = modelInput.value.trim() || 'gemini-flash-latest';
   state.showSettings = false;
   render();
@@ -120,13 +114,10 @@ function renderSettingsModal(){
   <div class="modal-overlay" onclick="if(event.target===this) toggleSettings()">
     <div class="modal-sheet" onclick="event.stopPropagation()">
       <button class="modal-close" onclick="toggleSettings()">✕</button>
-      <h3>Gemini API Settings</h3>
-      <p>Paste your free Gemini API key (from aistudio.google.com/apikey) to power the AI Tutor, Quiz Generator, Grammar Coach, Study Planner, and Homework Helper — including photo uploads.</p>
-      <div class="warn-box">⚠️ This key is stored only in this browser tab's memory for testing. Never ship an app to real users with a key typed into client-side code like this — in production, calls should go through your own backend so the key is never exposed.</div>
-      <div class="field"><label>Gemini API Key</label><input id="apiKeyInput" type="password" placeholder="AIzaSy..." value="${OPENAI_API_KEY}"></div>
-      <div class="field"><label>Model</label><input id="modelInput" placeholder="gemini-flash-latest" value="${OPENAI_MODEL}"></div>
-      <p style="font-size:11px;color:#999;margin:-4px 0 6px;">Google renames/retires model versions often. If this ever errors with "model no longer available," try <code>gemini-3.1-flash-lite</code> here instead.</p>
-      <div class="key-status ${OPENAI_API_KEY?'ok':'missing'}">${OPENAI_API_KEY?'✓ Key set for this session':'No key set yet — AI features will not work'}</div>
+      <h3>Settings</h3>
+      <p>WinsPrep's AI features run through a shared backend, so there's nothing for you to set up — no personal API key needed.</p>
+      <div class="field"><label>AI Model (advanced)</label><input id="modelInput" placeholder="gemini-flash-latest" value="${OPENAI_MODEL}"></div>
+      <p style="font-size:11px;color:#999;margin:-4px 0 6px;">Only change this if a feature starts erroring with "model no longer available" — Google renames these occasionally. Try <code>gemini-3.1-flash-lite</code> as a fallback.</p>
       <button class="btn btn-solid-pink" style="width:100%;margin-top:14px;" onclick="saveSettings()">Save</button>
     </div>
   </div>`;
@@ -633,7 +624,7 @@ function renderHomework(){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>Homework Helper</h3><span>${OPENAI_API_KEY?'● Online':'● Needs API key'}</span></div>
+      <div style="flex:1;"><h3>Homework Helper</h3><span>● Online</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="chat-body" id="chatBody">
@@ -1153,7 +1144,7 @@ function renderTutor(){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>AI Tutor</h3><span>${OPENAI_API_KEY?'● Online':'● Needs API key'} · ${c.subject}</span></div>
+      <div style="flex:1;"><h3>AI Tutor</h3><span>● Online · ${c.subject}</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="chips">
@@ -1238,7 +1229,7 @@ function renderQuizSetup(q){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>Practice Quiz</h3><span style="color:#999;">${OPENAI_API_KEY?'Set up your session':'Add your API key to begin'}</span></div>
+      <div style="flex:1;"><h3>Practice Quiz</h3><span style="color:#999;">Set up your session</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="quiz-setup">

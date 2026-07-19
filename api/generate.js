@@ -1,62 +1,63 @@
-// Vercel Serverless Function: keeps GEMINI_API_KEY on the server.
-// Configure GEMINI_API_KEY in Vercel Project Settings → Environment Variables.
-module.exports = async function handler(req, res) {
+// Vercel serverless function: /api/generate
+// Keeps the real Gemini API key on the server (as an environment variable),
+// so nobody using the deployed app ever sees or needs to enter their own key.
+//
+// Setup on Vercel:
+//   1. In your Vercel project -> Settings -> Environment Variables
+//   2. Add: GEMINI_API_KEY = <your real key from aistudio.google.com/apikey>
+//   3. Redeploy (env vars only take effect on new deployments)
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: { message: 'Method not allowed. Use POST.' } });
+    return;
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'AI service is not configured yet.' });
-
-  const body = req.body || {};
-  const { systemPrompt, messages, maxTokens } = body;
-  if (typeof systemPrompt !== 'string' || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Invalid AI request.' });
+  if (!apiKey) {
+    res.status(500).json({
+      error: { message: 'Server is missing GEMINI_API_KEY. Set it in your Vercel project environment variables and redeploy.' }
+    });
+    return;
   }
 
-  // Keep anonymous browser requests bounded. Add authentication/rate limiting
-  // before using this public endpoint at significant scale.
-  if (systemPrompt.length > 12000 || messages.length > 40) {
-    return res.status(413).json({ error: 'Request is too large.' });
+  const { systemPrompt, contents, maxOutputTokens, model } = req.body || {};
+
+  if (!contents || !Array.isArray(contents)) {
+    res.status(400).json({ error: { message: 'Request body must include a "contents" array.' } });
+    return;
   }
 
-  const contents = messages.map(message => {
-    const role = message.role === 'assistant' ? 'model' : 'user';
-    const content = message.content;
-    const parts = Array.isArray(content)
-      ? content.map(part => {
-          if (part.type === 'text') return { text: String(part.text || '') };
-          if (part.type === 'image_url') {
-            const match = String(part.image_url && part.image_url.url || '').match(/^data:(.*?);base64,(.*)$/);
-            if (match) return { inline_data: { mime_type: match[1], data: match[2] } };
-          }
-          return { text: '' };
-        })
-      : [{ text: String(content || '') }];
-    return { role, parts };
-  });
+  // A small allowlist keeps the proxy from being used to hit arbitrary/expensive models.
+  const ALLOWED_MODELS = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const modelName = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${GEMINI_API_KEY}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents,
+    generationConfig: { maxOutputTokens: maxOutputTokens || 700 }
+  };
+  if (systemPrompt) {
+    body.system_instruction = { parts: [{ text: systemPrompt }] };
+  }
 
   try {
-    const response = await fetch(endpoint, {
+    const upstream = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: { maxOutputTokens: Math.min(Math.max(Number(maxTokens) || 700, 1), 4096) }
-      })
+      body: JSON.stringify(body)
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data.error && data.error.message || 'The AI service is temporarily unavailable.' });
+
+    const data = await upstream.json();
+
+    if (!upstream.ok) {
+      res.status(upstream.status).json(data);
+      return;
     }
-    const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-    return res.status(200).json({ text: parts ? parts.map(part => part.text || '').join('') : '' });
-  } catch (error) {
-    return res.status(502).json({ error: 'Could not reach the AI service.' });
+
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(502).json({ error: { message: 'Could not reach Gemini right now.', detail: String(err) } });
   }
-};
+}
