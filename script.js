@@ -15,10 +15,11 @@ function initialsAvatar(name, size){
   return `<div style="width:${s}px;height:${s}px;border-radius:50%;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-family:'Poppins';font-weight:800;color:var(--deep-pink);font-size:${s*0.42}px;">${letter}</div>`;
 }
 
-// ---- AI configuration ----
-// The real Gemini API key lives only on the server, as the GEMINI_API_KEY environment
-// variable read by /api/generate.js. The browser never sees it, so users of the deployed
-// app don't need to enter or manage an API key themselves.
+// ---- Google Gemini configuration ----
+// This key lives only in this browser tab's memory (never saved to disk/localStorage).
+// It is visible to anyone who opens dev tools on this page, so only use a key here for
+// your own local testing, never ship this file publicly with a key baked in.
+let OPENAI_API_KEY = '';
 let OPENAI_MODEL = 'gemini-flash-latest';
 
 let state = {
@@ -39,6 +40,9 @@ let state = {
 };
 
 async function callOpenAI(systemPrompt, messages, maxTokens){
+  if(!OPENAI_API_KEY){
+    throw new Error('missing_key');
+  }
   // Translate our generic {role, content} messages into Gemini's {role, parts} shape.
   // Gemini uses "model" instead of "assistant", and images go in as inline_data, not image_url.
   const contents = messages.map(m => {
@@ -60,21 +64,21 @@ async function callOpenAI(systemPrompt, messages, maxTokens){
     return { role, parts };
   });
 
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${OPENAI_MODEL}:generateContent?key=${OPENAI_API_KEY}`;
   const requestBody = JSON.stringify({
-    systemPrompt,
+    system_instruction: { parts: [{ text: systemPrompt }] },
     contents,
-    maxOutputTokens: maxTokens || 700,
-    model: OPENAI_MODEL
+    generationConfig: { maxOutputTokens: maxTokens || 700 }
   });
 
-  // The backend proxy (/api/generate) can itself hit transient 503 (overloaded) or
-  // 429 (rate limited) responses from Gemini - retry a couple of times before giving up.
+  // Gemini's free tier occasionally returns 503 (overloaded) or 429 (rate limited) -
+  // these are transient, so retry a couple of times with a short backoff before giving up.
   const maxAttempts = 3;
   let lastError;
   for(let attempt = 1; attempt <= maxAttempts; attempt++){
     let response;
     try{
-      response = await fetch('/api/generate', {
+      response = await fetch(endpoint, {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body: requestBody
@@ -103,7 +107,9 @@ async function callOpenAI(systemPrompt, messages, maxTokens){
 
 function toggleSettings(){ state.showSettings = !state.showSettings; render(); }
 function saveSettings(){
+  const keyInput = document.getElementById('apiKeyInput');
   const modelInput = document.getElementById('modelInput');
+  OPENAI_API_KEY = keyInput.value.trim();
   OPENAI_MODEL = modelInput.value.trim() || 'gemini-flash-latest';
   state.showSettings = false;
   render();
@@ -114,10 +120,13 @@ function renderSettingsModal(){
   <div class="modal-overlay" onclick="if(event.target===this) toggleSettings()">
     <div class="modal-sheet" onclick="event.stopPropagation()">
       <button class="modal-close" onclick="toggleSettings()">✕</button>
-      <h3>Settings</h3>
-      <p>WinsPrep's AI features run through a shared backend, so there's nothing for you to set up — no personal API key needed.</p>
-      <div class="field"><label>AI Model (advanced)</label><input id="modelInput" placeholder="gemini-flash-latest" value="${OPENAI_MODEL}"></div>
-      <p style="font-size:11px;color:#999;margin:-4px 0 6px;">Only change this if a feature starts erroring with "model no longer available" — Google renames these occasionally. Try <code>gemini-3.1-flash-lite</code> as a fallback.</p>
+      <h3>Gemini API Settings</h3>
+      <p>Paste your free Gemini API key (from aistudio.google.com/apikey) to power the AI Tutor, Quiz Generator, Grammar Coach, Study Planner, and Homework Helper — including photo uploads.</p>
+      <div class="warn-box">⚠️ This key is stored only in this browser tab's memory for testing. Never ship an app to real users with a key typed into client-side code like this — in production, calls should go through your own backend so the key is never exposed.</div>
+      <div class="field"><label>Gemini API Key</label><input id="apiKeyInput" type="password" placeholder="AIzaSy..." value="${OPENAI_API_KEY}"></div>
+      <div class="field"><label>Model</label><input id="modelInput" placeholder="gemini-flash-latest" value="${OPENAI_MODEL}"></div>
+      <p style="font-size:11px;color:#999;margin:-4px 0 6px;">Google renames/retires model versions often. If this ever errors with "model no longer available," try <code>gemini-3.1-flash-lite</code> here instead.</p>
+      <div class="key-status ${OPENAI_API_KEY?'ok':'missing'}">${OPENAI_API_KEY?'✓ Key set for this session':'No key set yet — AI features will not work'}</div>
       <button class="btn btn-solid-pink" style="width:100%;margin-top:14px;" onclick="saveSettings()">Save</button>
     </div>
   </div>`;
@@ -624,7 +633,7 @@ function renderHomework(){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>Homework Helper</h3><span>● Online</span></div>
+      <div style="flex:1;"><h3>Homework Helper</h3><span>${OPENAI_API_KEY?'● Online':'● Needs API key'}</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="chat-body" id="chatBody">
@@ -1144,7 +1153,7 @@ function renderTutor(){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>AI Tutor</h3><span>● Online · ${c.subject}</span></div>
+      <div style="flex:1;"><h3>AI Tutor</h3><span>${OPENAI_API_KEY?'● Online':'● Needs API key'} · ${c.subject}</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="chips">
@@ -1229,7 +1238,7 @@ function renderQuizSetup(q){
   <div class="screen">
     <div class="chat-header">
       <button class="back-btn" onclick="goDashboard()">${ic("arrow-left",16)}</button>
-      <div style="flex:1;"><h3>Practice Quiz</h3><span style="color:#999;">Set up your session</span></div>
+      <div style="flex:1;"><h3>Practice Quiz</h3><span style="color:#999;">${OPENAI_API_KEY?'Set up your session':'Add your API key to begin'}</span></div>
       <button class="gear-btn" onclick="toggleSettings()">${ic("gear",17)}</button>
     </div>
     <div class="quiz-setup">
@@ -1262,48 +1271,19 @@ function renderQuizLoading(){
   </div>`;
 }
 
-// If the model's response got cut off before the JSON array finished (common with
-// longer responses now that most questions include a chart), plain JSON.parse fails
-// entirely. This recovers whatever complete question objects came through instead of
-// throwing away the whole quiz.
-function parseQuizJson(text){
-  try{
-    const parsed = JSON.parse(text);
-    if(Array.isArray(parsed)) return parsed;
-  }catch(e){ /* fall through to recovery */ }
-
-  const closeBraceIndices = [];
-  for(let i = 0; i < text.length; i++){
-    if(text[i] === '}') closeBraceIndices.push(i + 1);
-  }
-  for(let i = closeBraceIndices.length - 1; i >= 0; i--){
-    const candidate = text.slice(0, closeBraceIndices[i]) + ']';
-    try{
-      const parsed = JSON.parse(candidate);
-      if(Array.isArray(parsed) && parsed.length) return parsed;
-    }catch(e){ /* try an earlier closing brace */ }
-  }
-  return [];
-}
-
 async function generateQuiz(){
   state.quiz.phase = 'loading';
   render();
   const q = state.quiz;
   const system = `You are a question-writing engine for a Nigerian Primary 6 Common Entrance exam prep app. Output ONLY valid JSON, no markdown fences, no preamble, no commentary. The JSON must be an array of question objects with this exact shape:
 [{"question":"...", "options":["A text","B text","C text","D text"], "correctIndex":0, "explanation":"short step-by-step explanation of the correct answer", "visual":null}]
-IMPORTANT: at least half of the questions MUST include a real "visual" object relevant to that specific question (not null) - do not default to null out of caution. For Mathematics and Quantitative Reasoning, almost every question should have one (number lines for arithmetic/fractions, bar charts for word problems with quantities). For Basic Science, Social Studies, and Civic Education, use one whenever the question involves a process, comparison, or sequence. Only leave "visual" null for questions that are purely about reading, grammar, or vocabulary with nothing to visualize.
-Choose ONE of these exact shapes, built from the actual numbers/steps in that question (never reuse the same visual across different questions): {"type":"bar","title":"...","labels":["A","B"],"values":[3,5]}, {"type":"cycle","title":"...","steps":["First","Then","Finally"]}, {"type":"timeline","title":"...","steps":["First","Then","Finally"]}, {"type":"number_line","title":"...","min":0,"max":10,"points":[{"value":3,"label":"3"}]}, or {"type":"comparison_table","title":"...","headers":["A","B"],"rows":[["a","b"]]}. Never use an image URL, base64 data, or a separate image-generation request.`;
+For questions where a visual genuinely helps, replace null with ONE small chart object using one of these shapes: {"type":"bar","title":"...","labels":["A","B"],"values":[3,5]}, {"type":"cycle","title":"...","steps":["First","Then","Finally"]}, {"type":"timeline","title":"...","steps":["First","Then","Finally"]}, {"type":"number_line","title":"...","min":0,"max":10,"points":[{"value":3,"label":"3"}]}, or {"type":"comparison_table","title":"...","headers":["A","B"],"rows":[["a","b"]]}. Never use an image URL, base64 data, or a separate image-generation request.`;
   const userMsg = `Generate ${q.count} multiple choice questions for the subject "${q.subject}" at "${q.difficulty}" difficulty, appropriate for a Nigerian Primary 6 pupil preparing for the Common Entrance Examination. Cover a good range of relevant topics. Return ONLY the JSON array, nothing else.`;
 
   try{
-    // More questions (and now more charts per question) need a bigger output budget -
-    // scale it, capped to what these models can actually return in one response.
-    const tokenBudget = Math.min(8000, 700 + q.count * 260);
-    let text = await callOpenAI(system, [{ role:'user', content: userMsg }], tokenBudget);
+    let text = await callOpenAI(system, [{ role:'user', content: userMsg }], 4000);
     text = text.replace(/```json|```/g,'').trim();
-    const questions = parseQuizJson(text);
-    if(!questions.length) throw new Error('The response did not contain any usable questions.');
+    const questions = JSON.parse(text);
     state.quiz.questions = questions;
     state.quiz.current = 0;
     state.quiz.answers = [];
@@ -1355,7 +1335,7 @@ function renderQuizActive(q){
 }
 
 function renderQuizVisual(item, subject){
-  const visual = item.visual || buildLocalVisual(subject, item.question, item.question);
+  const visual = item.visual;
   return visual ? `<div class="quiz-visual">${renderChart(visual)}</div>` : '';
 }
 
@@ -1380,57 +1360,30 @@ function renderNoteImage(n){
   if(n.imageLoading){
     return `<div class="live-note-visual live-note-loading"><span class="spinner"></span><span>Finding a relevant study image...</span></div>`;
   }
-  if(n.image && n.image.url){
-    return `<figure class="live-note-visual">
+  if(!n.image || !n.image.url) return '';
+  return `<figure class="live-note-visual">
     <img src="${escapeHtml(n.image.url)}" alt="${escapeHtml(n.topic || 'Study topic')}" onerror="this.closest('figure').remove()">
     <figcaption>Live reference image · ${escapeHtml(n.image.credit || 'Wikimedia Commons')}</figcaption>
   </figure>`;
-  }
-  // No real photo match found for this topic - show a relevant diagram instead of nothing.
-  const fallback = buildLocalVisual(n.subject, n.topic, n.topic);
-  return fallback ? `<div class="chart-box" style="margin-bottom:14px;">${renderChart(fallback)}</div>` : '';
 }
 
 // Loads a public, topical reference image without using an image-generation model
 // or the learner's Gemini API key. Wikimedia's API permits browser requests with origin=*.
-async function searchWikimedia(query){
+async function fetchTopicImage(subject, topic){
+  const query = `${topic} ${subject || ''}`.trim();
   const endpoint = new URL('https://commons.wikimedia.org/w/api.php');
   endpoint.search = new URLSearchParams({
     action:'query', format:'json', generator:'search', gsrsearch:query, gsrnamespace:'6',
-    gsrlimit:'8', prop:'imageinfo', iiprop:'url|mime', iiurlwidth:'1200', origin:'*'
+    gsrlimit:'6', prop:'imageinfo', iiprop:'url', iiurlwidth:'1200', origin:'*'
   }).toString();
   const response = await fetch(endpoint.toString());
-  if(!response.ok) return null;
+  if(!response.ok) throw new Error('image_search_failed');
   const data = await response.json();
   const pages = Object.values((data.query && data.query.pages) || {});
-  const match = pages.find(page => {
-    const info = page.imageinfo && page.imageinfo[0];
-    if(!info || !(info.thumburl || info.url)) return false;
-    // Skip non-photo/illustration files (audio, pdf, category icons, etc.)
-    const mime = info.mime || '';
-    return mime.startsWith('image/') && !/\.svg$/i.test(info.url||'');
-  });
+  const match = pages.find(page => page.imageinfo && page.imageinfo[0] && (page.imageinfo[0].thumburl || page.imageinfo[0].url));
   if(!match) return null;
   const image = match.imageinfo[0];
   return { url:image.thumburl || image.url, credit:'Wikimedia Commons' };
-}
-
-async function fetchTopicImage(subject, topic){
-  // Try progressively broader/simpler queries - specific topic+subject phrasing often
-  // has no exact photo match, but a simpler version of the same query usually does.
-  const attempts = [
-    `${topic} ${subject || ''}`.trim(),
-    topic,
-    subject
-  ].filter(Boolean);
-
-  for(const query of attempts){
-    try{
-      const result = await searchWikimedia(query);
-      if(result) return result;
-    }catch(e){ /* try next query */ }
-  }
-  return null;
 }
 function answerQuiz(i){
   state.quiz.answers[state.quiz.current] = i;
