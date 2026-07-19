@@ -1262,6 +1262,30 @@ function renderQuizLoading(){
   </div>`;
 }
 
+// If the model's response got cut off before the JSON array finished (common with
+// longer responses now that most questions include a chart), plain JSON.parse fails
+// entirely. This recovers whatever complete question objects came through instead of
+// throwing away the whole quiz.
+function parseQuizJson(text){
+  try{
+    const parsed = JSON.parse(text);
+    if(Array.isArray(parsed)) return parsed;
+  }catch(e){ /* fall through to recovery */ }
+
+  const closeBraceIndices = [];
+  for(let i = 0; i < text.length; i++){
+    if(text[i] === '}') closeBraceIndices.push(i + 1);
+  }
+  for(let i = closeBraceIndices.length - 1; i >= 0; i--){
+    const candidate = text.slice(0, closeBraceIndices[i]) + ']';
+    try{
+      const parsed = JSON.parse(candidate);
+      if(Array.isArray(parsed) && parsed.length) return parsed;
+    }catch(e){ /* try an earlier closing brace */ }
+  }
+  return [];
+}
+
 async function generateQuiz(){
   state.quiz.phase = 'loading';
   render();
@@ -1273,9 +1297,13 @@ Choose ONE of these exact shapes, built from the actual numbers/steps in that qu
   const userMsg = `Generate ${q.count} multiple choice questions for the subject "${q.subject}" at "${q.difficulty}" difficulty, appropriate for a Nigerian Primary 6 pupil preparing for the Common Entrance Examination. Cover a good range of relevant topics. Return ONLY the JSON array, nothing else.`;
 
   try{
-    let text = await callOpenAI(system, [{ role:'user', content: userMsg }], 4000);
+    // More questions (and now more charts per question) need a bigger output budget -
+    // scale it, capped to what these models can actually return in one response.
+    const tokenBudget = Math.min(8000, 700 + q.count * 260);
+    let text = await callOpenAI(system, [{ role:'user', content: userMsg }], tokenBudget);
     text = text.replace(/```json|```/g,'').trim();
-    const questions = JSON.parse(text);
+    const questions = parseQuizJson(text);
+    if(!questions.length) throw new Error('The response did not contain any usable questions.');
     state.quiz.questions = questions;
     state.quiz.current = 0;
     state.quiz.answers = [];
