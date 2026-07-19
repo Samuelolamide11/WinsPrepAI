@@ -1,4 +1,4 @@
-﻿function ic(name, size, color){
+function ic(name, size, color){
   const style = color ? `style="color:${color};"` : '';
   return `<svg class="wp-icon" width="${size||20}" height="${size||20}" viewBox="0 0 24 24" ${style}><use href="#i-${name}"></use></svg>`;
 }
@@ -467,7 +467,7 @@ If there are no mistakes, return an empty mistakes array and still include 1-2 t
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: text }], 1200);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.grammar.result = JSON.parse(raw);
+    state.grammar.result = parseAiJson(raw);
     logActivity('grammar', 'Checked writing with Grammar Coach');
   }catch(err){
     if(err.message === 'missing_key'){
@@ -579,7 +579,7 @@ Only include entries for the days the pupil selected. Keep each day realistic fo
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: userMsg }], 2000);
     raw = raw.replace(/```json|```/g,'').trim();
-    p.plan = JSON.parse(raw);
+    p.plan = parseAiJson(raw);
     logActivity('planner', 'Generated a new study plan');
   }catch(err){
     if(err.message === 'missing_key'){
@@ -718,7 +718,7 @@ async function selectNotesSubject(subject){
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: `Subject: ${subject}` }], 400);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.notes.topics = JSON.parse(raw);
+    state.notes.topics = parseAiJson(raw);
     state.notes.phase = 'topics';
   }catch(err){
     if(err.message === 'missing_key'){ state.notes.topicsLoading=false; render(); toggleSettings(); return; }
@@ -778,7 +778,7 @@ Use null for "chart" in sections where a chart wouldn't genuinely help. Never fo
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: userMsg }], 2500);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.notes.content = JSON.parse(raw);
+    state.notes.content = parseAiJson(raw);
     state.notes.phase = 'content';
     state.notes.expanded = { 0: true };
     logActivity('notes', `Read notes on ${state.notes.topic} (${state.notes.subject})`);
@@ -1262,11 +1262,39 @@ function renderQuizLoading(){
   </div>`;
 }
 
+// AI responses occasionally contain a literal line break or tab inside a text value
+// (e.g. "This topic covers\nfractions") instead of properly escaping it. JSON.parse
+// rejects that outright as an "unterminated string" even though everything else about
+// the response is fine. This walks the text and escapes control characters, but only
+// while inside a quoted string, so real JSON structure/whitespace is untouched.
+function sanitizeJsonText(text){
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for(let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if(inString){
+      if(escaped){ out += ch; escaped = false; continue; }
+      if(ch === '\\'){ out += ch; escaped = true; continue; }
+      if(ch === '"'){ inString = false; out += ch; continue; }
+      if(ch === '\n'){ out += '\\n'; continue; }
+      if(ch === '\r'){ out += '\\r'; continue; }
+      if(ch === '\t'){ out += '\\t'; continue; }
+      out += ch;
+    } else {
+      if(ch === '"'){ inString = true; }
+      out += ch;
+    }
+  }
+  return out;
+}
+
 // If the model's response got cut off before the JSON array finished (common with
 // longer responses now that most questions include a chart), plain JSON.parse fails
 // entirely. This recovers whatever complete question objects came through instead of
 // throwing away the whole quiz.
 function parseQuizJson(text){
+  text = sanitizeJsonText(text);
   try{
     const parsed = JSON.parse(text);
     if(Array.isArray(parsed)) return parsed;
@@ -1284,6 +1312,13 @@ function parseQuizJson(text){
     }catch(e){ /* try an earlier closing brace */ }
   }
   return [];
+}
+
+// Same idea as parseQuizJson but for plain JSON objects/arrays used elsewhere
+// (topics list, notes content, grammar result, study plan) - sanitize first,
+// then parse normally.
+function parseAiJson(text){
+  return JSON.parse(sanitizeJsonText(text));
 }
 
 async function generateQuiz(){
