@@ -1268,7 +1268,8 @@ async function generateQuiz(){
   const q = state.quiz;
   const system = `You are a question-writing engine for a Nigerian Primary 6 Common Entrance exam prep app. Output ONLY valid JSON, no markdown fences, no preamble, no commentary. The JSON must be an array of question objects with this exact shape:
 [{"question":"...", "options":["A text","B text","C text","D text"], "correctIndex":0, "explanation":"short step-by-step explanation of the correct answer", "visual":null}]
-For questions where a visual genuinely helps, replace null with ONE small chart object using one of these shapes: {"type":"bar","title":"...","labels":["A","B"],"values":[3,5]}, {"type":"cycle","title":"...","steps":["First","Then","Finally"]}, {"type":"timeline","title":"...","steps":["First","Then","Finally"]}, {"type":"number_line","title":"...","min":0,"max":10,"points":[{"value":3,"label":"3"}]}, or {"type":"comparison_table","title":"...","headers":["A","B"],"rows":[["a","b"]]}. Never use an image URL, base64 data, or a separate image-generation request.`;
+IMPORTANT: at least half of the questions MUST include a real "visual" object relevant to that specific question (not null) - do not default to null out of caution. For Mathematics and Quantitative Reasoning, almost every question should have one (number lines for arithmetic/fractions, bar charts for word problems with quantities). For Basic Science, Social Studies, and Civic Education, use one whenever the question involves a process, comparison, or sequence. Only leave "visual" null for questions that are purely about reading, grammar, or vocabulary with nothing to visualize.
+Choose ONE of these exact shapes, built from the actual numbers/steps in that question (never reuse the same visual across different questions): {"type":"bar","title":"...","labels":["A","B"],"values":[3,5]}, {"type":"cycle","title":"...","steps":["First","Then","Finally"]}, {"type":"timeline","title":"...","steps":["First","Then","Finally"]}, {"type":"number_line","title":"...","min":0,"max":10,"points":[{"value":3,"label":"3"}]}, or {"type":"comparison_table","title":"...","headers":["A","B"],"rows":[["a","b"]]}. Never use an image URL, base64 data, or a separate image-generation request.`;
   const userMsg = `Generate ${q.count} multiple choice questions for the subject "${q.subject}" at "${q.difficulty}" difficulty, appropriate for a Nigerian Primary 6 pupil preparing for the Common Entrance Examination. Cover a good range of relevant topics. Return ONLY the JSON array, nothing else.`;
 
   try{
@@ -1326,7 +1327,7 @@ function renderQuizActive(q){
 }
 
 function renderQuizVisual(item, subject){
-  const visual = item.visual;
+  const visual = item.visual || buildLocalVisual(subject, item.question, item.question);
   return visual ? `<div class="quiz-visual">${renderChart(visual)}</div>` : '';
 }
 
@@ -1351,30 +1352,57 @@ function renderNoteImage(n){
   if(n.imageLoading){
     return `<div class="live-note-visual live-note-loading"><span class="spinner"></span><span>Finding a relevant study image...</span></div>`;
   }
-  if(!n.image || !n.image.url) return '';
-  return `<figure class="live-note-visual">
+  if(n.image && n.image.url){
+    return `<figure class="live-note-visual">
     <img src="${escapeHtml(n.image.url)}" alt="${escapeHtml(n.topic || 'Study topic')}" onerror="this.closest('figure').remove()">
     <figcaption>Live reference image · ${escapeHtml(n.image.credit || 'Wikimedia Commons')}</figcaption>
   </figure>`;
+  }
+  // No real photo match found for this topic - show a relevant diagram instead of nothing.
+  const fallback = buildLocalVisual(n.subject, n.topic, n.topic);
+  return fallback ? `<div class="chart-box" style="margin-bottom:14px;">${renderChart(fallback)}</div>` : '';
 }
 
 // Loads a public, topical reference image without using an image-generation model
 // or the learner's Gemini API key. Wikimedia's API permits browser requests with origin=*.
-async function fetchTopicImage(subject, topic){
-  const query = `${topic} ${subject || ''}`.trim();
+async function searchWikimedia(query){
   const endpoint = new URL('https://commons.wikimedia.org/w/api.php');
   endpoint.search = new URLSearchParams({
     action:'query', format:'json', generator:'search', gsrsearch:query, gsrnamespace:'6',
-    gsrlimit:'6', prop:'imageinfo', iiprop:'url', iiurlwidth:'1200', origin:'*'
+    gsrlimit:'8', prop:'imageinfo', iiprop:'url|mime', iiurlwidth:'1200', origin:'*'
   }).toString();
   const response = await fetch(endpoint.toString());
-  if(!response.ok) throw new Error('image_search_failed');
+  if(!response.ok) return null;
   const data = await response.json();
   const pages = Object.values((data.query && data.query.pages) || {});
-  const match = pages.find(page => page.imageinfo && page.imageinfo[0] && (page.imageinfo[0].thumburl || page.imageinfo[0].url));
+  const match = pages.find(page => {
+    const info = page.imageinfo && page.imageinfo[0];
+    if(!info || !(info.thumburl || info.url)) return false;
+    // Skip non-photo/illustration files (audio, pdf, category icons, etc.)
+    const mime = info.mime || '';
+    return mime.startsWith('image/') && !/\.svg$/i.test(info.url||'');
+  });
   if(!match) return null;
   const image = match.imageinfo[0];
   return { url:image.thumburl || image.url, credit:'Wikimedia Commons' };
+}
+
+async function fetchTopicImage(subject, topic){
+  // Try progressively broader/simpler queries - specific topic+subject phrasing often
+  // has no exact photo match, but a simpler version of the same query usually does.
+  const attempts = [
+    `${topic} ${subject || ''}`.trim(),
+    topic,
+    subject
+  ].filter(Boolean);
+
+  for(const query of attempts){
+    try{
+      const result = await searchWikimedia(query);
+      if(result) return result;
+    }catch(e){ /* try next query */ }
+  }
+  return null;
 }
 function answerQuiz(i){
   state.quiz.answers[state.quiz.current] = i;
