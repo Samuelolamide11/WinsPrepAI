@@ -1,41 +1,63 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WinsPrep</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-<svg style="display:none" aria-hidden="true">
-  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6 10v9h4.5v-5.5h3V19H18v-9"/></symbol>
-  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10.5H9l-4 3.8V5.5z"/><path d="M8 9.5h8M8 12.7h5"/></symbol>
-  <symbol id="i-quiz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="4" width="13" height="16" rx="2"/><path d="M9 3.3h6v2.2H9z"/><path d="M8.5 12l2 2 4-4.2M8.5 16.5h7"/></symbol>
-  <symbol id="i-profile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M4.8 19.5c1.4-4 4.7-5.7 7.2-5.7s5.8 1.7 7.2 5.7"/></symbol>
-  <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19.5l.8-3.6L14.6 6.6l2.8 2.8L8.1 18.7l-3.6.8z"/><path d="M13.2 8l2.8 2.8"/></symbol>
-  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.2" width="16" height="14.8" rx="2"/><path d="M4 9.5h16M8 3v4M16 3v4"/><path d="M8.2 13h1.6M12.2 13h1.6M16.2 13h1.6M8.2 16.3h1.6M12.2 16.3h1.6"/></symbol>
-  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.2h3.2L8.7 6h6.6l1.5 2.2H20V19H4V8.2z"/><circle cx="12" cy="13.3" r="3.2"/></symbol>
-  <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.7" cy="8.2" r="2.6"/><circle cx="16.2" cy="9.3" r="2.1"/><path d="M3.2 19c1-3.3 3.7-4.7 5.5-4.7 1.7 0 3.5.9 4.6 2.5"/><path d="M12.6 15.3c1-1 2.3-1.4 3.5-1.4 1.9 0 4.1 1.4 5.1 4.5"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 5.5"/></symbol>
-  <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></symbol>
-  <symbol id="i-bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.2 6.2 0 00-3.6 11.2c.6.45 1 1.2 1 2V17h5.2v-.8c0-.8.4-1.55 1-2A6.2 6.2 0 0012 3z"/><path d="M9.6 20h4.8M10.5 22h3"/></symbol>
-  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="0.9" fill="currentColor" stroke="none"/></symbol>
-  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5.5M11 6.2L5 12l6 5.8"/></symbol>
-  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12L20 4.2l-6.6 15.6-2.4-6-6.5-1.8z"/><path d="M11 13.8l3-3"/></symbol>
-  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.5v3M12 18.5v3M4.4 4.4l2.1 2.1M17.5 17.5l2.1 2.1M2 12h3M19 12h3M4.4 19.6l2.1-2.1M17.5 6.5l2.1-2.1"/></symbol>
-  <symbol id="i-trend-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.5l6.7 6.7 3.8-3.8 6.5 6.5"/><path d="M20.5 9.9v6h-6"/></symbol>
-  <symbol id="i-thumbs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 10.8v8.7H4V10.8h2.8z"/><path d="M6.8 10.8l3-6.6c1 0 2 .9 2 2v3h5.6c1.1 0 1.9.95 1.7 2l-1.3 6c-.2 1-1 1.7-2 1.7H9.8c-1 0-2-.35-3-1"/></symbol>
-  <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L7.2 20.5M17 3.5l-2.3 17M3.5 9h18M2.3 15h18"/></symbol>
-  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.2c-1.4-1-3.6-1.7-6.5-1.7v14.8c2.9 0 5.1.7 6.5 1.7"/><path d="M12 5.2c1.4-1 3.6-1.7 6.5-1.7v14.8c-2.9 0-5.1.7-6.5 1.7"/><path d="M12 5.2v14.8"/></symbol>
-  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
-  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2c1.6-.8 3.4-1.2 5-1.2 1.4 0 2.4.3 3 .7 0.6-.4 1.6-.7 3-.7 1.6 0 3.4.4 5 1.2v13.6c-1.6-.8-3.4-1.2-5-1.2-1.4 0-2.4.3-3 .7-0.6-.4-1.6-.7-3-.7-1.6 0-3.4.4-5 1.2V5.2z"/><path d="M12 4.7v13.6"/></symbol>
-  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8.5l6.5 7 6.5-7"/></symbol>
-</svg>
-<div class="phone" id="phone"></div>
+// Vercel serverless function: /api/generate
+// Keeps the real Gemini API key on the server (as an environment variable),
+// so nobody using the deployed app ever sees or needs to enter their own key.
+//
+// Setup on Vercel:
+//   1. In your Vercel project -> Settings -> Environment Variables
+//   2. Add: GEMINI_API_KEY = <your real key from aistudio.google.com/apikey>
+//   3. Redeploy (env vars only take effect on new deployments)
 
-  <script src="script.js" defer></script>
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: { message: 'Method not allowed. Use POST.' } });
+    return;
+  }
 
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({
+      error: { message: 'Server is missing GEMINI_API_KEY. Set it in your Vercel project environment variables and redeploy.' }
+    });
+    return;
+  }
 
-</body>
-</html>
+  const { systemPrompt, contents, maxOutputTokens, model } = req.body || {};
 
+  if (!contents || !Array.isArray(contents)) {
+    res.status(400).json({ error: { message: 'Request body must include a "contents" array.' } });
+    return;
+  }
+
+  // A small allowlist keeps the proxy from being used to hit arbitrary/expensive models.
+  const ALLOWED_MODELS = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const modelName = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents,
+    generationConfig: { maxOutputTokens: maxOutputTokens || 700 }
+  };
+  if (systemPrompt) {
+    body.system_instruction = { parts: [{ text: systemPrompt }] };
+  }
+
+  try {
+    const upstream = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await upstream.json();
+
+    if (!upstream.ok) {
+      res.status(upstream.status).json(data);
+      return;
+    }
+
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(502).json({ error: { message: 'Could not reach Gemini right now.', detail: String(err) } });
+  }
+}

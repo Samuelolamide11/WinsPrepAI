@@ -1,4 +1,4 @@
-function ic(name, size, color){
+﻿function ic(name, size, color){
   const style = color ? `style="color:${color};"` : '';
   return `<svg class="wp-icon" width="${size||20}" height="${size||20}" viewBox="0 0 24 24" ${style}><use href="#i-${name}"></use></svg>`;
 }
@@ -467,7 +467,7 @@ If there are no mistakes, return an empty mistakes array and still include 1-2 t
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: text }], 1200);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.grammar.result = parseAiJson(raw);
+    state.grammar.result = JSON.parse(raw);
     logActivity('grammar', 'Checked writing with Grammar Coach');
   }catch(err){
     if(err.message === 'missing_key'){
@@ -579,7 +579,7 @@ Only include entries for the days the pupil selected. Keep each day realistic fo
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: userMsg }], 2000);
     raw = raw.replace(/```json|```/g,'').trim();
-    p.plan = parseAiJson(raw);
+    p.plan = JSON.parse(raw);
     logActivity('planner', 'Generated a new study plan');
   }catch(err){
     if(err.message === 'missing_key'){
@@ -716,11 +716,9 @@ async function selectNotesSubject(subject){
 
   const system = `You suggest a table of contents for a Nigerian Primary 6 pupil studying for the Common Entrance Examination. Output ONLY a valid JSON array of exactly 8 short topic name strings for the given subject, ordered from foundational to more advanced. No markdown fences, no commentary.`;
   try{
-    let raw = await callOpenAI(system, [{ role:'user', content: `Subject: ${subject}` }], 700);
+    let raw = await callOpenAI(system, [{ role:'user', content: `Subject: ${subject}` }], 400);
     raw = raw.replace(/```json|```/g,'').trim();
-    const topics = parseAiJsonArray(raw);
-    if(!topics.length) throw new Error('The response did not contain any usable topics.');
-    state.notes.topics = topics;
+    state.notes.topics = JSON.parse(raw);
     state.notes.phase = 'topics';
   }catch(err){
     if(err.message === 'missing_key'){ state.notes.topicsLoading=false; render(); toggleSettings(); return; }
@@ -780,7 +778,7 @@ Use null for "chart" in sections where a chart wouldn't genuinely help. Never fo
   try{
     let raw = await callOpenAI(system, [{ role:'user', content: userMsg }], 2500);
     raw = raw.replace(/```json|```/g,'').trim();
-    state.notes.content = parseAiJson(raw);
+    state.notes.content = JSON.parse(raw);
     state.notes.phase = 'content';
     state.notes.expanded = { 0: true };
     logActivity('notes', `Read notes on ${state.notes.topic} (${state.notes.subject})`);
@@ -1264,68 +1262,28 @@ function renderQuizLoading(){
   </div>`;
 }
 
-// AI responses occasionally contain a literal line break or tab inside a text value
-// (e.g. "This topic covers\nfractions") instead of properly escaping it. JSON.parse
-// rejects that outright as an "unterminated string" even though everything else about
-// the response is fine. This walks the text and escapes control characters, but only
-// while inside a quoted string, so real JSON structure/whitespace is untouched.
-function sanitizeJsonText(text){
-  let out = '';
-  let inString = false;
-  let escaped = false;
-  for(let i = 0; i < text.length; i++){
-    const ch = text[i];
-    if(inString){
-      if(escaped){ out += ch; escaped = false; continue; }
-      if(ch === '\\'){ out += ch; escaped = true; continue; }
-      if(ch === '"'){ inString = false; out += ch; continue; }
-      if(ch === '\n'){ out += '\\n'; continue; }
-      if(ch === '\r'){ out += '\\r'; continue; }
-      if(ch === '\t'){ out += '\\t'; continue; }
-      out += ch;
-    } else {
-      if(ch === '"'){ inString = true; }
-      out += ch;
-    }
-  }
-  return out;
-}
-
 // If the model's response got cut off before the JSON array finished (common with
 // longer responses now that most questions include a chart), plain JSON.parse fails
 // entirely. This recovers whatever complete question objects came through instead of
 // throwing away the whole quiz.
-// Recovers a usable array from AI JSON output even if the response was cut off
-// entirely before the closing bracket - works for arrays of objects (quiz questions,
-// each closed by "}") and arrays of plain strings (topic lists, each closed by a
-// closing quote), by trying to close the array at progressively earlier points.
-function parseAiJsonArray(text){
-  text = sanitizeJsonText(text);
+function parseQuizJson(text){
   try{
     const parsed = JSON.parse(text);
     if(Array.isArray(parsed)) return parsed;
   }catch(e){ /* fall through to recovery */ }
 
-  const closerIndices = [];
+  const closeBraceIndices = [];
   for(let i = 0; i < text.length; i++){
-    if(text[i] === '}' || text[i] === '"') closerIndices.push(i + 1);
+    if(text[i] === '}') closeBraceIndices.push(i + 1);
   }
-  for(let i = closerIndices.length - 1; i >= 0; i--){
-    const candidate = text.slice(0, closerIndices[i]) + ']';
+  for(let i = closeBraceIndices.length - 1; i >= 0; i--){
+    const candidate = text.slice(0, closeBraceIndices[i]) + ']';
     try{
       const parsed = JSON.parse(candidate);
       if(Array.isArray(parsed) && parsed.length) return parsed;
-    }catch(e){ /* try an earlier closing point */ }
+    }catch(e){ /* try an earlier closing brace */ }
   }
   return [];
-}
-function parseQuizJson(text){ return parseAiJsonArray(text); }
-
-// Same idea as parseQuizJson but for plain JSON objects/arrays used elsewhere
-// (topics list, notes content, grammar result, study plan) - sanitize first,
-// then parse normally.
-function parseAiJson(text){
-  return JSON.parse(sanitizeJsonText(text));
 }
 
 async function generateQuiz(){
